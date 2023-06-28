@@ -142,7 +142,6 @@ def search(query_text, cid, cu, cp, oai_api):
         size=1,
         source=False
     )
-    print(search_results)
 
     return body, url
 
