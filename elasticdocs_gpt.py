@@ -70,6 +70,7 @@ def search(query_text, cid, cu, cp, oai_api):
     else:
         print("writing to env file...")
         write_env(cid, cu, cp, oai_api)
+        openai.api_key = oai_api
 
 ###########################################################################
 # 1. If cid, cu, cp, and oai_api is empty:
