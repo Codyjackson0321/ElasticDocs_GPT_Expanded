@@ -19,7 +19,6 @@ from dotenv import load_dotenv
 # cloud_user - Elasticsearch Cluster User
 # cloud_pass - Elasticsearch User Password
 
-#openai.api_key = os.environ['openai_api']
 model = "gpt-3.5-turbo-0301"
 
 # Connect to Elastic Cloud cluster
@@ -35,6 +34,7 @@ def check_env():
 
     env_list = ("cloud_id", "cloud_user", "cloud_pass", "openai_api_key")
     if all(env in os.environ for env in env_list):
+        print("ENV file found!")
         return True
 
     return False
@@ -43,13 +43,18 @@ def write_env(cid, cu, cp, oai_api):
     if not cid or not cu or not cp or not oai_api:
         return
     with open(".env", "w") as env_file:
-        env_file.write("export cloud_id=" + cid + "\n")
-        env_file.write("export cloud_user=" + cu + "\n")
-        env_file.write("export cloud_pass=" + cp + "\n")
-        env_file.write("export openai_api_key=" + oai_api + "\n")
+        env_file.write("cloud_id=\"" + cid + "\"\n")
+        env_file.write("cloud_user=\"" + cu + "\"\n")
+        env_file.write("cloud_pass=\"" + cp + "\"\n")
+        env_file.write("openai_api_key=\"" + oai_api + "\"\n")
         env_file.close()
 
 
+search_results = {
+    "elser": {},
+    "vector": {},
+    "bm25": {},
+}
 # Search ElasticSearch index and return body and URL of the result
 def search(query_text, cid, cu, cp, oai_api):
     if not cid and not cu and not cp and not oai_api:
@@ -117,8 +122,26 @@ def search(query_text, cid, cu, cp, oai_api):
                      size=1,
                      source=False)
 
+
+
     body = resp['hits']['hits'][0]['fields']['body_content'][0]
     url = resp['hits']['hits'][0]['fields']['url'][0]
+
+
+
+    # Begin setting additional search results:
+    # Vector
+    search_results['vector'] = resp
+
+    # Generic BM25
+    search_results['bm25'] = es.search(
+        index=index,
+        query=query,
+        fields=fields,
+        size=1,
+        source=False
+    )
+    print(search_results)
 
     return body, url
 
@@ -135,30 +158,60 @@ def chat_gpt(prompt, model="gpt-3.5-turbo", max_tokens=1024, max_context_tokens=
     truncated_prompt = truncate_text(prompt, max_context_tokens - max_tokens - safety_margin)
 
     response = openai.ChatCompletion.create(model=model,
-                                            messages=[{"role": "system", "content": "You are a helpful assistant."}, {"role": "user", "content": truncated_prompt}])
+                                            messages=[
+                                                {"role": "system", "content": "You are a helpful assistant."},
+                                                {"role": "user", "content": truncated_prompt}
+                                                      ])
 
     return response["choices"][0]["message"]["content"]
 
 
-st.title("ElasticDocs GPT")
+def main():
+    st.set_page_config(
+        layout="wide"
+    )
+    st.title("ElasticDocs GPT")
 
-# Main chat form
-with st.form("chat_form"):
-    cloud_id = st.text_input("cloud_id: ", type='password')
-    username = st.text_input("username: ")
-    password = st.text_input("password: ", type='password')
-    oai_api = st.text_input("openai_api_key: ", type='password')
-    query = st.text_input("You: ")
-    submit_button = st.form_submit_button("Send")
+    # Main chat form
+    with st.form("chat_form"):
+        input_col1, input_col2, input_col3, input_col4 = st.columns(4)
+        cloud_id = input_col1.text_input("cloud_id: ", type='password')
+        username = input_col2.text_input("username: ")
+        password = input_col3.text_input("password: ", type='password')
+        oai_api = input_col4.text_input("openai_api_key: ", type='password')
+        query = st.text_input("You: ")
+        submit_button = st.form_submit_button("Send")
 
-# Generate and display response on form submission
-negResponse = "I'm unable to answer the question based on the information I have from Elastic Docs."
-if submit_button:
-    resp, url = search(query, cloud_id, username, password, oai_api)
-    prompt = f"Answer this question: {query}\nUsing only the information from this Elastic Doc: {resp}\nIf the answer is not contained in the supplied doc reply '{negResponse}' and nothing else"
-    answer = chat_gpt(prompt)
-    
-    if negResponse in answer:
-        st.write(f"ChatGPT: {answer.strip()}")
-    else:
-        st.write(f"ChatGPT: {answer.strip()}\n\nDocs: {url}")
+    # Generate and display response on form submission
+    negResponse = "I'm unable to answer the question based on the information I have from Elastic Docs."
+    if submit_button:
+        resp, url = search(query, cloud_id, username, password, oai_api)
+        prompt = f"Answer this question: {query}\nUsing only the information from this Elastic Doc: {resp}\nIf the answer is not contained in the supplied doc reply '{negResponse}' and nothing else"
+        answer = chat_gpt(prompt)
+
+        # Setup columns for different search results
+        gpt_col, bm25_col, vector_col = st.columns(3)
+        gpt_col.header("ChatGPT")
+        bm25_col.header("BM25")
+        vector_col.header("Basic Vector")
+
+        # Sets ChatGPT answer
+        if negResponse in answer:
+            gpt_col.write(f"ChatGPT: {answer.strip()}")
+        else:
+            gpt_col.write(f"ChatGPT: {answer.strip()}\n\nDocs: {url}")
+
+        # Sets BM25 response
+        try:
+            bm25_col.write(search_results['bm25']['hits']['hits'][0]['fields'])
+        except:
+            bm25_col.write("No results yet!")
+
+        # Sets BM25 response
+        try:
+            vector_col.write(search_results['vector']['hits']['hits'][0]['fields'])
+        except:
+            vector_col.write("No results yet!")
+
+if __name__ == "__main__":
+    main()
