@@ -115,13 +115,14 @@ def search(query_text, cid, cu, cp, oai_api):
     }
 
     fields = ["title", "body_content", "url"]
-    index = 'search-elastic-docs'
+    index = 'search-elastic-docs-completed'
     resp = es.search(index=index,
                      query=query,
                      knn=knn,
                      fields=fields,
                      size=1,
                      source=False)
+    #print(resp)
 
 
 
@@ -138,6 +139,36 @@ def search(query_text, cid, cu, cp, oai_api):
     search_results['bm25'] = es.search(
         index=index,
         query=query,
+        fields=fields,
+        size=1,
+        source=False
+    )
+
+    # Elser
+    search_results['elser'] = es.search(
+        index=index,
+        query={
+            "bool": {
+                "should": [
+                    {
+                        "text_expansion": {
+                            "ml.inference.body_content_expanded.predicted_value": {
+                                "model_id": ".elser_model_1",
+                                "model_text": query_text
+                            }
+                        }
+                    },
+                    {
+                        "text_expansion": {
+                            "ml.inference.title_expanded.predicted_value": {
+                                "model_id": ".elser_model_1",
+                                "model_text": query_text
+                            }
+                        }
+                    }
+                ]
+            }
+        },
         fields=fields,
         size=1,
         source=False
@@ -186,14 +217,16 @@ def main():
     negResponse = "I'm unable to answer the question based on the information I have from Elastic Docs."
     if submit_button:
         resp, url = search(query, cloud_id, username, password, oai_api)
+        print(resp)
         prompt = f"Answer this question: {query}\nUsing only the information from this Elastic Doc: {resp}\nIf the answer is not contained in the supplied doc reply '{negResponse}' and nothing else"
         answer = chat_gpt(prompt)
 
         # Setup columns for different search results
-        gpt_col, bm25_col, vector_col = st.columns(3)
+        gpt_col, bm25_col, vector_col, elser_col = st.columns(4)
         gpt_col.header("ChatGPT")
         bm25_col.header("BM25")
         vector_col.header("Basic Vector")
+        elser_col.header("Elser")
 
         # Sets ChatGPT answer
         if negResponse in answer:
@@ -212,6 +245,12 @@ def main():
             vector_col.write(search_results['vector']['hits']['hits'][0]['fields'])
         except:
             vector_col.write("No results yet!")
+
+
+        try:
+            elser_col.write(search_results['elser']['hits']['hits'][0]['fields'])
+        except:
+            elser_col.write("No results yet!")
 
 if __name__ == "__main__":
     main()
