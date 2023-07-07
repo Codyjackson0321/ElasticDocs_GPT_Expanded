@@ -3,6 +3,8 @@ import streamlit as st
 import openai
 from elasticsearch import Elasticsearch
 from dotenv import load_dotenv
+import tiktoken
+import time
 
 # This code is part of an Elastic Blog showing how to combine
 # Elasticsearch's search relevancy power with 
@@ -170,22 +172,29 @@ def search(query_text, cid, cu, cp, oai_api):
 def truncate_text(text, max_tokens):
     tokens = text.split()
     if len(tokens) <= max_tokens:
-        return text
+        return text, len(tokens)
 
-    return ' '.join(tokens[:max_tokens])
+    return ' '.join(tokens[:max_tokens]), len(tokens)
+
+
+def encoding_token_count(string: str, encoding_model: str) -> int:
+    encoding = tiktoken.encoding_for_model(encoding_model)
+    return len(encoding.encode(string))
+
 
 # Generate a response from ChatGPT based on the given prompt
 def chat_gpt(prompt, model="gpt-3.5-turbo", max_tokens=1024, max_context_tokens=4000, safety_margin=5):
     # Truncate the prompt content to fit within the model's context length
-    truncated_prompt = truncate_text(prompt, max_context_tokens - max_tokens - safety_margin)
-
+    truncated_prompt, word_count = truncate_text(prompt, max_context_tokens - max_tokens - safety_margin)
+    openai_token_count = encoding_token_count(prompt, model)
+    print(f"word_count = {word_count}, openai_token_count = {openai_token_count}")
     response = openai.ChatCompletion.create(model=model,
                                             messages=[
                                                 {"role": "system", "content": "You are a helpful assistant."},
                                                 {"role": "user", "content": truncated_prompt}
                                                       ])
 
-    return response["choices"][0]["message"]["content"]
+    return response["choices"][0]["message"]["content"], word_count, openai_token_count
 
 
 def main():
@@ -219,9 +228,16 @@ def main():
             body = search_results[s]['hits']['hits'][0]['fields']['body_content'][0]
             url = search_results[s]['hits']['hits'][0]['fields']['url'][0]
             prompt = f"Answer this question: {query}\nUsing only the information from this Elastic Doc: {body}\nIf the answer is not contained in the supplied doc reply '{negResponse}' and nothing else"
-            answer = chat_gpt(prompt)
+            begin = time.perf_counter()
+            answer, word_count, openai_token_count = chat_gpt(prompt)
+            end = time.perf_counter()
             # Sets ChatGPT answer
             gpt_col.header(f"ChatGPT {s}:")
+            answer_token_count = encoding_token_count(answer, "gpt-3.5-turbo")
+            cost = float((0.0015*(openai_token_count)/1000) + (0.002*(answer_token_count/1000)))
+            time_taken = end - begin
+            gpt_col.write(f"\n\n**Word count: {word_count}, Token count: {openai_token_count}**")
+            gpt_col.write(f"\n**Cost: ${cost}, ChatGPT response time: {time_taken:0.4f} sec**")
             if negResponse in answer:
                 gpt_col.write(f"{answer.strip()}")
             else:

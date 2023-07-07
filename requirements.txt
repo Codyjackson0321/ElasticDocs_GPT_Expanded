@@ -2,3 +2,4 @@ streamlit
 openai
 elasticsearch
 python-dotenv
+tiktoken
