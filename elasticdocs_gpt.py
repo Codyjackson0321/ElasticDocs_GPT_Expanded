@@ -23,7 +23,7 @@ model = "gpt-3.5-turbo-0301"
 
 # Connect to Elastic Cloud cluster
 def es_connect(cid, user, passwd):
-    es = Elasticsearch(cloud_id=cid, http_auth=(user, passwd))
+    es = Elasticsearch(cloud_id=cid, basic_auth=(user, passwd))
     return es
 
 
@@ -72,14 +72,6 @@ def search(query_text, cid, cu, cp, oai_api):
         write_env(cid, cu, cp, oai_api)
         openai.api_key = oai_api
 
-###########################################################################
-# 1. If cid, cu, cp, and oai_api is empty:
-#   1 a. Check if env file exists
-#       1 b. If file exists, read data file
-#       1 c. If file doesn't exist, error out
-#   1 d. If cid, cu, cp, and oai_api not empty:
-#       1 e. Store data in .env file
-###########################################################################
     es = es_connect(cid, cu, cp)
 
     # Elasticsearch query (BM25) and kNN configuration for hybrid search
@@ -122,7 +114,6 @@ def search(query_text, cid, cu, cp, oai_api):
                      fields=fields,
                      size=1,
                      source=False)
-    #print(resp)
 
 
 
@@ -217,10 +208,6 @@ def main():
     negResponse = "I'm unable to answer the question based on the information I have from Elastic Docs."
     if submit_button:
         resp, url = search(query, cloud_id, username, password, oai_api)
-        print(resp)
-        prompt = f"Answer this question: {query}\nUsing only the information from this Elastic Doc: {resp}\nIf the answer is not contained in the supplied doc reply '{negResponse}' and nothing else"
-        answer = chat_gpt(prompt)
-
         # Setup columns for different search results
         gpt_col, bm25_col, vector_col, elser_col = st.columns(4)
         gpt_col.header("ChatGPT")
@@ -228,11 +215,17 @@ def main():
         vector_col.header("Basic Vector")
         elser_col.header("Elser")
 
-        # Sets ChatGPT answer
-        if negResponse in answer:
-            gpt_col.write(f"ChatGPT: {answer.strip()}")
-        else:
-            gpt_col.write(f"ChatGPT: {answer.strip()}\n\nDocs: {url}")
+        for s in search_results.keys():
+            body = search_results[s]['hits']['hits'][0]['fields']['body_content'][0]
+            url = search_results[s]['hits']['hits'][0]['fields']['url'][0]
+            prompt = f"Answer this question: {query}\nUsing only the information from this Elastic Doc: {body}\nIf the answer is not contained in the supplied doc reply '{negResponse}' and nothing else"
+            answer = chat_gpt(prompt)
+            # Sets ChatGPT answer
+            gpt_col.header(f"ChatGPT {s}:")
+            if negResponse in answer:
+                gpt_col.write(f"{answer.strip()}")
+            else:
+                gpt_col.write(f"{answer.strip()}\n\nDocs: {url}")
 
         # Sets BM25 response
         try:
