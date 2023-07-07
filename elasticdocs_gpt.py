@@ -237,7 +237,7 @@ def main():
             cost = float((0.0015*(openai_token_count)/1000) + (0.002*(answer_token_count/1000)))
             time_taken = end - begin
             gpt_col.write(f"\n\n**Word count: {word_count}, Token count: {openai_token_count}**")
-            gpt_col.write(f"\n**Cost: ${cost}, ChatGPT response time: {time_taken:0.4f} sec**")
+            gpt_col.write(f"\n**Cost: ${cost:0.6f}, ChatGPT response time: {time_taken:0.4f} sec**")
             if negResponse in answer:
                 gpt_col.write(f"{answer.strip()}")
             else:
