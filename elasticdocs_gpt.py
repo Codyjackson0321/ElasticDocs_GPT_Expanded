@@ -194,7 +194,7 @@ def chat_gpt(prompt, model="gpt-3.5-turbo", max_tokens=1024, max_context_tokens=
                                                 {"role": "user", "content": truncated_prompt}
                                                       ])
 
-    return response["choices"][0]["message"]["content"], word_count, openai_token_count
+    return response["choices"][0]["message"]["content"], word_count, response["usage"]["total_tokens"]
 
 
 def main():
@@ -218,11 +218,11 @@ def main():
     if submit_button:
         resp, url = search(query, cloud_id, username, password, oai_api)
         # Setup columns for different search results
-        gpt_col, bm25_col, vector_col, elser_col = st.columns(4)
-        gpt_col.header("ChatGPT")
-        bm25_col.header("BM25")
-        vector_col.header("Basic Vector")
-        elser_col.header("Elser")
+        s_col = {}
+        s_col["bm25"], s_col["vector"],s_col["elser"] = st.columns(3)
+        s_col["bm25"].write("# BM25")
+        s_col["vector"].write("# Basic Vector")
+        s_col["elser"].write("# Elser")
 
         for s in search_results.keys():
             body = search_results[s]['hits']['hits'][0]['fields']['body_content'][0]
@@ -231,35 +231,27 @@ def main():
             begin = time.perf_counter()
             answer, word_count, openai_token_count = chat_gpt(prompt)
             end = time.perf_counter()
-            # Sets ChatGPT answer
-            gpt_col.header(f"ChatGPT {s}:")
             answer_token_count = encoding_token_count(answer, "gpt-3.5-turbo")
             cost = float((0.0015*(openai_token_count)/1000) + (0.002*(answer_token_count/1000)))
             time_taken = end - begin
-            gpt_col.write(f"\n\n**Word count: {word_count}, Token count: {openai_token_count}**")
-            gpt_col.write(f"\n**Cost: ${cost:0.6f}, ChatGPT response time: {time_taken:0.4f} sec**")
+            col = s_col[s]
+            col.write("## ChatGPT Response")
             if negResponse in answer:
-                gpt_col.write(f"{answer.strip()}")
+                col.write(f"\n\n**Word count: {word_count}, Token count: {openai_token_count}**")
+                col.write(f"\n**Cost: ${cost:0.6f}, ChatGPT response time: {time_taken:0.4f} sec**")
+                col.write(f"{answer.strip()}")
             else:
-                gpt_col.write(f"{answer.strip()}\n\nDocs: {url}")
-
-        # Sets BM25 response
-        try:
-            bm25_col.write(search_results['bm25']['hits']['hits'][0]['fields'])
-        except:
-            bm25_col.write("No results yet!")
-
-        # Sets BM25 response
-        try:
-            vector_col.write(search_results['vector']['hits']['hits'][0]['fields'])
-        except:
-            vector_col.write("No results yet!")
+                col.write(f"\n\n**Word count: {word_count}, Token count: {openai_token_count}**")
+                col.write(f"\n**Cost: ${cost:0.6f}, ChatGPT response time: {time_taken:0.4f} sec**")
+                col.write(f"{answer.strip()}\n\nDocs: {url}")
+            col.write("---")
+            col.write(f"## Elasticsearch {s} response:")
+            try:
+                col.write(search_results[s]['hits']['hits'][0]['fields'])
+            except:
+                col.write("No results yet!")
 
 
-        try:
-            elser_col.write(search_results['elser']['hits']['hits'][0]['fields'])
-        except:
-            elser_col.write("No results yet!")
 
 if __name__ == "__main__":
     main()
