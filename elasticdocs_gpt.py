@@ -109,25 +109,17 @@ def search(query_text, cid, cu, cp, oai_api):
     }
 
     fields = ["title", "body_content", "url"]
-    index = 'search-elastic-docs-completed'
-    resp = es.search(index=index,
+    if "es_index" in os.environ:
+        index = os.environ["es_index"]
+    else:
+        index = 'search-elastic-docs'
+    print(f"using index {index}")
+    search_results["vector"] = es.search(index=index,
                      query=query,
                      knn=knn,
                      fields=fields,
                      size=1,
                      source=False)
-
-
-
-    body = resp['hits']['hits'][0]['fields']['body_content'][0]
-    url = resp['hits']['hits'][0]['fields']['url'][0]
-
-
-
-    # Begin setting additional search results:
-    # Vector
-    search_results['vector'] = resp
-
     # Generic BM25
     search_results['bm25'] = es.search(
         index=index,
@@ -136,7 +128,6 @@ def search(query_text, cid, cu, cp, oai_api):
         size=1,
         source=False
     )
-
     # Elser
     search_results['elser'] = es.search(
         index=index,
@@ -167,7 +158,6 @@ def search(query_text, cid, cu, cp, oai_api):
         source=False
     )
 
-    return body, url
 
 def truncate_text(text, max_tokens):
     tokens = text.split()
@@ -216,7 +206,7 @@ def main():
     # Generate and display response on form submission
     negResponse = "I'm unable to answer the question based on the information I have from Elastic Docs."
     if submit_button:
-        resp, url = search(query, cloud_id, username, password, oai_api)
+        search(query, cloud_id, username, password, oai_api)
         # Setup columns for different search results
         s_col = {}
         s_col["bm25"], s_col["vector"],s_col["elser"] = st.columns(3)
@@ -225,31 +215,35 @@ def main():
         s_col["elser"].write("# Elser")
 
         for s in search_results.keys():
-            body = search_results[s]['hits']['hits'][0]['fields']['body_content'][0]
-            url = search_results[s]['hits']['hits'][0]['fields']['url'][0]
-            prompt = f"Answer this question: {query}\nUsing only the information from this Elastic Doc: {body}\nIf the answer is not contained in the supplied doc reply '{negResponse}' and nothing else"
-            begin = time.perf_counter()
-            answer, word_count, openai_token_count = chat_gpt(prompt)
-            end = time.perf_counter()
-            answer_token_count = encoding_token_count(answer, "gpt-3.5-turbo")
-            cost = float((0.0015*(openai_token_count)/1000) + (0.002*(answer_token_count/1000)))
-            time_taken = end - begin
             col = s_col[s]
-            col.write("## ChatGPT Response")
-            if negResponse in answer:
-                col.write(f"\n\n**Word count: {word_count}, Token count: {openai_token_count}**")
-                col.write(f"\n**Cost: ${cost:0.6f}, ChatGPT response time: {time_taken:0.4f} sec**")
-                col.write(f"{answer.strip()}")
-            else:
-                col.write(f"\n\n**Word count: {word_count}, Token count: {openai_token_count}**")
-                col.write(f"\n**Cost: ${cost:0.6f}, ChatGPT response time: {time_taken:0.4f} sec**")
-                col.write(f"{answer.strip()}\n\nDocs: {url}")
-            col.write("---")
-            col.write(f"## Elasticsearch {s} response:")
             try:
-                col.write(search_results[s]['hits']['hits'][0]['fields'])
-            except:
-                col.write("No results yet!")
+                body = search_results[s]['hits']['hits'][0]['fields']['body_content'][0]
+                url = search_results[s]['hits']['hits'][0]['fields']['url'][0]
+                prompt = f"Answer this question: {query}\nUsing only the information from this Elastic Doc: {body}\nIf the answer is not contained in the supplied doc reply '{negResponse}' and nothing else"
+                begin = time.perf_counter()
+                answer, word_count, openai_token_count = chat_gpt(prompt)
+                end = time.perf_counter()
+                answer_token_count = encoding_token_count(answer, "gpt-3.5-turbo")
+                cost = float((0.0015*(openai_token_count)/1000) + (0.002*(answer_token_count/1000)))
+                time_taken = end - begin
+                col.write("## ChatGPT Response")
+                if negResponse in answer:
+                    col.write(f"\n\n**Word count: {word_count}, Token count: {openai_token_count}**")
+                    col.write(f"\n**Cost: ${cost:0.6f}, ChatGPT response time: {time_taken:0.4f} sec**")
+                    col.write(f"{answer.strip()}")
+                else:
+                    col.write(f"\n\n**Word count: {word_count}, Token count: {openai_token_count}**")
+                    col.write(f"\n**Cost: ${cost:0.6f}, ChatGPT response time: {time_taken:0.4f} sec**")
+                    col.write(f"{answer.strip()}\n\nDocs: {url}")
+                col.write("---")
+                col.write(f"## Elasticsearch {s} response:")
+                try:
+                    col.write(search_results[s]['hits']['hits'][0]['fields'])
+                except:
+                    col.write("No results yet!")
+            except IndexError as e:
+                col.write("### No search results returned")
+                
 
 
 
