@@ -76,6 +76,10 @@ def search(query_text, cid, cu, cp, oai_api):
 
     es = es_connect(cid, cu, cp)
 
+    if "query_field" in os.environ:
+        query_field = os.environ["query_field"]
+    else:
+        query_field = "title-vector"
     # Elasticsearch query (BM25) and kNN configuration for hybrid search
     query = {
         "bool": {
@@ -89,14 +93,14 @@ def search(query_text, cid, cu, cp, oai_api):
             }],
             "filter": [{
                 "exists": {
-                    "field": "title-vector"
+                    "field": query_field
                 }
             }]
         }
     }
 
     knn = {
-        "field": "title-vector",
+        "field": query_field,
         "k": 1,
         "num_candidates": 20,
         "query_vector_builder": {
