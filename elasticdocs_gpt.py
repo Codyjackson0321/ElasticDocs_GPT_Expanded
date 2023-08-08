@@ -21,7 +21,36 @@ import time
 # cloud_user - Elasticsearch Cluster User
 # cloud_pass - Elasticsearch User Password
 
-model = "gpt-3.5-turbo-0301"
+models = {
+    "gpt-3.5-4k-tokens": {
+        "name": "gpt-3.5-turbo", 
+        "token_length": 4096,
+        "input_cost": 0.0015,
+        "output_cost": 0.002,
+        "available": True 
+    },
+    "gpt-3.5-16k-tokens": {
+        "name": "gpt-3.5-turbo-16k", 
+        "token_length": 16384,
+        "input_cost": 0.003,
+        "output_cost": 0.004,
+        "available": True 
+    },
+    "gpt-4-8k-tokens": {
+        "name": "gpt-4", 
+        "token_length": 8192,
+        "input_cost": 0.03,
+        "output_cost": 0.06,
+        "available": False 
+    },
+    "gpt-4-32k-tokens": {
+        "name": "gpt-4-32k", 
+        "token_length": 32768,
+        "input_cost": 0.06,
+        "output_cost": 0.12,
+        "available": False 
+    }
+}
 
 # Connect to Elastic Cloud cluster
 def es_connect(cid, user, passwd):
@@ -36,7 +65,6 @@ def check_env():
 
     env_list = ("cloud_id", "cloud_user", "cloud_pass", "openai_api_key")
     if all(env in os.environ for env in env_list):
-        print("ENV file found!")
         return True
 
     return False
@@ -61,7 +89,6 @@ search_results = {
 def search(query_text, cid, cu, cp, oai_api):
     if not cid and not cu and not cp and not oai_api:
         if check_env():
-            print("reading from env file...")
             cid = os.environ['cloud_id']
             cp = os.environ['cloud_pass']
             cu = os.environ['cloud_user']
@@ -177,12 +204,13 @@ def encoding_token_count(string: str, encoding_model: str) -> int:
 
 
 # Generate a response from ChatGPT based on the given prompt
-def chat_gpt(prompt, model="gpt-3.5-turbo", max_tokens=1024, max_context_tokens=4000, safety_margin=5):
+def chat_gpt(prompt, model, max_tokens=1024):
     # Truncate the prompt content to fit within the model's context length
-    truncated_prompt, word_count = truncate_text(prompt, max_context_tokens - max_tokens - safety_margin)
-    openai_token_count = encoding_token_count(prompt, model)
+    safety_margin = int(models[model]['token_length']*0.25)
+    truncated_prompt, word_count = truncate_text(prompt, models[model]['token_length'] - max_tokens - safety_margin)
+    openai_token_count = encoding_token_count(prompt, models[model]['name'])
     print(f"word_count = {word_count}, openai_token_count = {openai_token_count}")
-    response = openai.ChatCompletion.create(model=model,
+    response = openai.ChatCompletion.create(model=models[model]['name'],
                                             messages=[
                                                 {"role": "system", "content": "You are a helpful assistant."},
                                                 {"role": "user", "content": truncated_prompt}
@@ -204,12 +232,17 @@ def main():
         username = input_col2.text_input("username: ")
         password = input_col3.text_input("password: ", type='password')
         oai_api = input_col4.text_input("openai_api_key: ", type='password')
+        model_option = st.selectbox(
+            'Choose LLM Model',
+            [key for key, val in models.items() if val["available"]]
+        )
         query = st.text_input("You: ")
         submit_button = st.form_submit_button("Send")
 
     # Generate and display response on form submission
     negResponse = "I'm unable to answer the question based on the information I have from Elastic Docs."
     if submit_button:
+        print(f"selected model {model_option}")
         search(query, cloud_id, username, password, oai_api)
         # Setup columns for different search results
         s_col = {}
@@ -225,10 +258,12 @@ def main():
                 url = search_results[s]['hits']['hits'][0]['fields']['url'][0]
                 prompt = f"Answer this question: {query}\nUsing only the information from this Elastic Doc: {body}\nIf the answer is not contained in the supplied doc reply '{negResponse}' and nothing else"
                 begin = time.perf_counter()
-                answer, word_count, openai_token_count = chat_gpt(prompt)
+                answer, word_count, openai_token_count = chat_gpt(prompt, model=model_option)
                 end = time.perf_counter()
                 answer_token_count = encoding_token_count(answer, "gpt-3.5-turbo")
-                cost = float((0.0015*(openai_token_count)/1000) + (0.002*(answer_token_count/1000)))
+                input_model_cost = models[model_option]["input_cost"]
+                output_model_cost = models[model_option]["output_cost"]
+                cost = float((input_model_cost*(openai_token_count)/1000) + (output_model_cost*(answer_token_count/1000)))
                 time_taken = end - begin
                 col.write("## ChatGPT Response")
                 if negResponse in answer:
