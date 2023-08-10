@@ -41,7 +41,7 @@ models = {
         "token_length": 8192,
         "input_cost": 0.03,
         "output_cost": 0.06,
-        "available": False 
+        "available": True 
     },
     "gpt-4-32k-tokens": {
         "name": "gpt-4-32k", 
@@ -260,7 +260,7 @@ def main():
                 begin = time.perf_counter()
                 answer, word_count, openai_token_count = chat_gpt(prompt, model=model_option)
                 end = time.perf_counter()
-                answer_token_count = encoding_token_count(answer, "gpt-3.5-turbo")
+                answer_token_count = encoding_token_count(answer, models[model_option]['name'])
                 input_model_cost = models[model_option]["input_cost"]
                 output_model_cost = models[model_option]["output_cost"]
                 cost = float((input_model_cost*(openai_token_count)/1000) + (output_model_cost*(answer_token_count/1000)))
