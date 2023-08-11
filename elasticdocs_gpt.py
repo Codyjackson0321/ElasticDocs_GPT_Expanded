@@ -5,6 +5,8 @@ from elasticsearch import Elasticsearch
 from dotenv import load_dotenv
 import tiktoken
 import time
+import ipaddress
+import re
 
 # This code is part of an Elastic Blog showing how to combine
 # Elasticsearch's search relevancy power with 
@@ -54,8 +56,56 @@ models = {
 
 # Connect to Elastic Cloud cluster
 def es_connect(cid, user, passwd):
-    es = Elasticsearch(cloud_id=cid, basic_auth=(user, passwd))
+    if is_valid_cloud_id(cid):
+        # ESS cluster use the normal way
+        es = Elasticsearch(cloud_id=cid, basic_auth=(user, passwd))
+    elif is_valid_ip(cid):
+        # IP provided, we have to insert https & port and assume it's valid cert
+        url=f"https://{cid}:9200"
+        es = Elasticsearch(url, basic_auth=(user, passwd))
+    elif is_valid_url(cid):
+        if 'localhost' in cid:
+            url = cid.replace("https", "http")
+        es = Elasticsearch(url, basic_auth=(user, passwd))
+    elif 'localhost' in cid:
+        url = f"http://{cid}"
+        es = Elasticsearch(url, basic_auth=(user, passwd))
+    else:
+        print(f"ERROR: Invalid cid = {cid}")
+        return None
+
     return es
+
+
+def is_valid_ip(ip: str) -> bool:
+    try:
+        ipaddress.ip_address(ip)
+        return True
+    except ValueError:
+        return False
+
+
+def is_valid_url(url: str) -> bool:
+    url_pattern = re.compile(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+')
+    return bool(url_pattern.match(url))
+
+
+def is_valid_cloud_id(cloud_id: str) -> bool:
+    import base64
+    cloud_id_pattern = re.compile(r'^[a-zA-Z0-9_]+:[a-zA-Z0-9+/=]+$')
+    if not cloud_id_pattern.match(cloud_id):
+        print(f"cloud_id --> {cloud_id} doesn't match pattern")
+        return False
+    cluster_name, data = cloud_id.split(':')
+    try:
+        decoded_data = base64.b64decode(data, validate=True).decode()
+        cloud_fqdn = decoded_data.split(':')[0]
+        print(f"cluster: {cluster_name}.{cloud_fqdn}")
+        return True
+    except (base64.binascii.Error, TypeError):
+        print(f"cloud_id --> {cloud_id} doesn't have base64")
+        print(f"decoded_data {decoded_data}")
+        return False
 
 
 def check_env():
@@ -228,7 +278,7 @@ def main():
     # Main chat form
     with st.form("chat_form"):
         input_col1, input_col2, input_col3, input_col4 = st.columns(4)
-        cloud_id = input_col1.text_input("cloud_id: ", type='password')
+        cloud_id = input_col1.text_input("cloud_id/host: ", type='password')
         username = input_col2.text_input("username: ")
         password = input_col3.text_input("password: ", type='password')
         oai_api = input_col4.text_input("openai_api_key: ", type='password')
