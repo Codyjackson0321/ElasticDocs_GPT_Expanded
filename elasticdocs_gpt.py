@@ -43,7 +43,7 @@ models = {
         "token_length": 8192,
         "input_cost": 0.03,
         "output_cost": 0.06,
-        "available": True 
+        "available": False 
     },
     "gpt-4-32k-tokens": {
         "name": "gpt-4-32k", 
@@ -62,14 +62,21 @@ def es_connect(cid, user, passwd):
     elif is_valid_ip(cid):
         # IP provided, we have to insert https & port and assume it's valid cert
         url=f"https://{cid}:9200"
-        es = Elasticsearch(url, basic_auth=(user, passwd))
+        es = Elasticsearch(hosts=[url], basic_auth=(user, passwd))
     elif is_valid_url(cid):
         if 'localhost' in cid:
-            url = cid.replace("https", "http")
-        es = Elasticsearch(url, basic_auth=(user, passwd))
+            if 'ca_certs' in os.environ:
+                es = Elasticsearch(hosts=[cid], basic_auth=(user, passwd), ca_certs=os.environ['ca_certs'])
+            else:
+                es = Elasticsearch(hosts=[cid], basic_auth=(user, passwd), verify_certs=False)
+        else:
+            es = Elasticsearch(url, basic_auth=(user, passwd))
     elif 'localhost' in cid:
-        url = f"http://{cid}"
-        es = Elasticsearch(url, basic_auth=(user, passwd))
+        url = f"https://{cid}"
+        if 'ca_certs' in os.environ:
+            es = Elasticsearch(hosts=[url], basic_auth=(user, passwd), ca_certs=os.environ['ca_certs'])
+        else:
+            es = Elasticsearch(url, basic_auth=(user, passwd), verify_certs=False)
     else:
         print(f"ERROR: Invalid cid = {cid}")
         return None
@@ -94,7 +101,6 @@ def is_valid_cloud_id(cloud_id: str) -> bool:
     import base64
     cloud_id_pattern = re.compile(r'^[a-zA-Z0-9_]+:[a-zA-Z0-9+/=]+$')
     if not cloud_id_pattern.match(cloud_id):
-        print(f"cloud_id --> {cloud_id} doesn't match pattern")
         return False
     cluster_name, data = cloud_id.split(':')
     try:
@@ -136,7 +142,7 @@ search_results = {
     "bm25": {},
 }
 # Search ElasticSearch index and return body and URL of the result
-def search(query_text, cid, cu, cp, oai_api):
+def search(query_text, cid, cu, cp, oai_api, index="search-elastic-docs"):
     if not cid and not cu and not cp and not oai_api:
         if check_env():
             cid = os.environ['cloud_id']
@@ -192,8 +198,6 @@ def search(query_text, cid, cu, cp, oai_api):
     fields = ["title", "body_content", "url"]
     if "es_index" in os.environ:
         index = os.environ["es_index"]
-    else:
-        index = 'search-elastic-docs'
     print(f"using index {index}")
     search_results["vector"] = es.search(index=index,
                      query=query,
@@ -286,6 +290,11 @@ def main():
             'Choose LLM Model',
             [key for key, val in models.items() if val["available"]]
         )
+        index_option = st.selectbox(
+            'Choose Elasticsearch Index',
+            ['search-elastic-docs-completed', 'search-elastic-docs'],
+            index=1
+        )
         query = st.text_input("You: ")
         submit_button = st.form_submit_button("Send")
 
@@ -293,7 +302,7 @@ def main():
     negResponse = "I'm unable to answer the question based on the information I have from Elastic Docs."
     if submit_button:
         print(f"selected model {model_option}")
-        search(query, cloud_id, username, password, oai_api)
+        search(query, cloud_id, username, password, oai_api, index=index_option)
         # Setup columns for different search results
         s_col = {}
         s_col["bm25"], s_col["vector"],s_col["elser"] = st.columns(3)
