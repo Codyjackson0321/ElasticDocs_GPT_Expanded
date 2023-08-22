@@ -2,7 +2,7 @@ import os
 import streamlit as st
 import openai
 from elasticsearch import Elasticsearch
-from dotenv import load_dotenv
+from dotenv import dotenv_values
 import tiktoken
 import time
 import ipaddress
@@ -114,26 +114,24 @@ def is_valid_cloud_id(cloud_id: str) -> bool:
         return False
 
 
-def check_env():
-    if not load_dotenv(".env"):
-        print("ERROR: load_dotenv returned error")
+env_list = ("cloud_id", "cloud_user", "cloud_pass", "openai_api_key")
+def check_env(**kwargs):
+    if not (env_file_config := dotenv_values(".env")):
+        print("couldn't read .env file")
+        env = {key: kwargs.get(key, None) for key in env_list}
+    else:
+        env = {key: kwargs.get(key) if kwargs.get(key) not in ("", None) else env_file_config.get(key, None) for key in set(env_list) | set(env_file_config)}
+
+    if (no_env_list := [e for e in env_list if e not in env or env[e] == '']):
+        print(f"ERROR: the following are not in the list {no_env_list}")
         return False
 
-    env_list = ("cloud_id", "cloud_user", "cloud_pass", "openai_api_key")
-    if all(env in os.environ for env in env_list):
-        return True
-
-    return False
-
-def write_env(cid, cu, cp, oai_api):
-    if not cid or not cu or not cp or not oai_api:
-        return
     with open(".env", "w") as env_file:
-        env_file.write("cloud_id=\"" + cid + "\"\n")
-        env_file.write("cloud_user=\"" + cu + "\"\n")
-        env_file.write("cloud_pass=\"" + cp + "\"\n")
-        env_file.write("openai_api_key=\"" + oai_api + "\"\n")
-        env_file.close()
+        for k in [key for key, value in env.items() if value is not None]:
+            env_file.write(f"{k}=\"{env[k]}\"\n")
+            os.environ[k] = env[k]
+    env_file.close()
+    return True
 
 
 search_results = {
@@ -142,20 +140,11 @@ search_results = {
     "bm25": {},
 }
 # Search ElasticSearch index and return body and URL of the result
-def search(query_text, cid, cu, cp, oai_api, index="search-elastic-docs"):
-    if not cid and not cu and not cp and not oai_api:
-        if check_env():
-            cid = os.environ['cloud_id']
-            cp = os.environ['cloud_pass']
-            cu = os.environ['cloud_user']
-            openai.api_key = os.environ['openai_api_key']
-        else:
-            print("ERROR: Could not get environment variables!!!")
-            return None, None
-    else:
-        print("writing to env file...")
-        write_env(cid, cu, cp, oai_api)
-        openai.api_key = oai_api
+def search(query_text, index="search-elastic-docs"):
+    cid = os.environ['cloud_id']
+    cp = os.environ['cloud_pass']
+    cu = os.environ['cloud_user']
+    openai.api_key = os.environ['openai_api_key']
 
     es = es_connect(cid, cu, cp)
 
@@ -295,52 +284,55 @@ def main():
             ['search-elastic-docs-completed', 'search-elastic-docs'],
             index=1
         )
-        query = st.text_input("You: ")
+        query = st.text_input("Enter your query: ")
         submit_button = st.form_submit_button("Send")
 
     # Generate and display response on form submission
     negResponse = "I'm unable to answer the question based on the information I have from Elastic Docs."
     if submit_button:
         print(f"selected model {model_option}")
-        search(query, cloud_id, username, password, oai_api, index=index_option)
-        # Setup columns for different search results
-        s_col = {}
-        s_col["bm25"], s_col["vector"],s_col["elser"] = st.columns(3)
-        s_col["bm25"].write("# BM25")
-        s_col["vector"].write("# Basic Vector")
-        s_col["elser"].write("# Elser")
+        if not check_env(cloud_id=cloud_id, cloud_user=username, cloud_pass=password, openai_api_key=oai_api):
+            st.write("ERROR environment variables not set!!!")
+        else:
+            search(query, index=index_option)
+            # Setup columns for different search results
+            s_col = {}
+            s_col["bm25"], s_col["vector"],s_col["elser"] = st.columns(3)
+            s_col["bm25"].write("# BM25")
+            s_col["vector"].write("# Basic Vector")
+            s_col["elser"].write("# Elser")
 
-        for s in search_results.keys():
-            col = s_col[s]
-            try:
-                body = search_results[s]['hits']['hits'][0]['fields']['body_content'][0]
-                url = search_results[s]['hits']['hits'][0]['fields']['url'][0]
-                prompt = f"Answer this question: {query}\nUsing only the information from this Elastic Doc: {body}\nIf the answer is not contained in the supplied doc reply '{negResponse}' and nothing else"
-                begin = time.perf_counter()
-                answer, word_count, openai_token_count = chat_gpt(prompt, model=model_option)
-                end = time.perf_counter()
-                answer_token_count = encoding_token_count(answer, models[model_option]['name'])
-                input_model_cost = models[model_option]["input_cost"]
-                output_model_cost = models[model_option]["output_cost"]
-                cost = float((input_model_cost*(openai_token_count)/1000) + (output_model_cost*(answer_token_count/1000)))
-                time_taken = end - begin
-                col.write("## ChatGPT Response")
-                if negResponse in answer:
-                    col.write(f"\n\n**Word count: {word_count}, Token count: {openai_token_count}**")
-                    col.write(f"\n**Cost: ${cost:0.6f}, ChatGPT response time: {time_taken:0.4f} sec**")
-                    col.write(f"{answer.strip()}")
-                else:
-                    col.write(f"\n\n**Word count: {word_count}, Token count: {openai_token_count}**")
-                    col.write(f"\n**Cost: ${cost:0.6f}, ChatGPT response time: {time_taken:0.4f} sec**")
-                    col.write(f"{answer.strip()}\n\nDocs: {url}")
-                col.write("---")
-                col.write(f"## Elasticsearch {s} response:")
+            for s in search_results.keys():
+                col = s_col[s]
                 try:
-                    col.write(search_results[s]['hits']['hits'][0]['fields'])
-                except:
-                    col.write("No results yet!")
-            except IndexError as e:
-                col.write("### No search results returned")
+                    body = search_results[s]['hits']['hits'][0]['fields']['body_content'][0]
+                    url = search_results[s]['hits']['hits'][0]['fields']['url'][0]
+                    prompt = f"Answer this question: {query}\nUsing only the information from this Elastic Doc: {body}\nIf the answer is not contained in the supplied doc reply '{negResponse}' and nothing else"
+                    begin = time.perf_counter()
+                    answer, word_count, openai_token_count = chat_gpt(prompt, model=model_option)
+                    end = time.perf_counter()
+                    answer_token_count = encoding_token_count(answer, models[model_option]['name'])
+                    input_model_cost = models[model_option]["input_cost"]
+                    output_model_cost = models[model_option]["output_cost"]
+                    cost = float((input_model_cost*(openai_token_count)/1000) + (output_model_cost*(answer_token_count/1000)))
+                    time_taken = end - begin
+                    col.write("## ChatGPT Response")
+                    if negResponse in answer:
+                        col.write(f"\n\n**Word count: {word_count}, Token count: {openai_token_count}**")
+                        col.write(f"\n**Cost: ${cost:0.6f}, ChatGPT response time: {time_taken:0.4f} sec**")
+                        col.write(f"{answer.strip()}")
+                    else:
+                        col.write(f"\n\n**Word count: {word_count}, Token count: {openai_token_count}**")
+                        col.write(f"\n**Cost: ${cost:0.6f}, ChatGPT response time: {time_taken:0.4f} sec**")
+                        col.write(f"{answer.strip()}\n\nDocs: {url}")
+                    col.write("---")
+                    col.write(f"## Elasticsearch {s} response:")
+                    try:
+                        col.write(search_results[s]['hits']['hits'][0]['fields'])
+                    except:
+                        col.write("No results yet!")
+                except IndexError as e:
+                    col.write("### No search results returned")
                 
 
 
