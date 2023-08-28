@@ -99,7 +99,7 @@ def is_valid_url(url: str) -> bool:
 
 def is_valid_cloud_id(cloud_id: str) -> bool:
     import base64
-    cloud_id_pattern = re.compile(r'^[a-zA-Z0-9_]+:[a-zA-Z0-9+/=]+$')
+    cloud_id_pattern = re.compile(r'^[a-zA-Z0-9_-]+:[a-zA-Z0-9+/=]+$')
     if not cloud_id_pattern.match(cloud_id):
         return False
     cluster_name, data = cloud_id.split(':')
