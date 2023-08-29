@@ -281,7 +281,7 @@ def main():
         )
         index_option = st.selectbox(
             'Choose Elasticsearch Index',
-            ['search-elastic-docs-completed', 'search-elastic-docs'],
+            ['search-elastic-docs-complete', 'search-elastic-docs'],
             index=1
         )
         query = st.text_input("Enter your query: ")
