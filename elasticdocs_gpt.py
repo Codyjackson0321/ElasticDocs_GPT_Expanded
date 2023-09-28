@@ -135,9 +135,9 @@ def check_env(**kwargs):
 
 
 search_results = {
-    "elser": {},
-    "vector": {},
     "bm25": {},
+    "vector": {},
+    "elser": {},
 }
 # Search ElasticSearch index and return body and URL of the result
 def search(query_text, index="search-elastic-docs"):
