@@ -270,11 +270,16 @@ def main():
 
     # Main chat form
     with st.form("chat_form"):
-        input_col1, input_col2, input_col3, input_col4 = st.columns(4)
-        cloud_id = input_col1.text_input("cloud_id/host: ", type='password')
-        username = input_col2.text_input("username: ")
-        password = input_col3.text_input("password: ", type='password')
-        oai_api = input_col4.text_input("openai_api_key: ", type='password')
+        with st.expander("**Click here to enter Elasticsearch cluster connectivity information**"):
+            st.write("\
+                **If you're in the GenAI Workshop using Strigo \
+                these fields can be left blank** \
+            ")
+            input_col1, input_col2, input_col3 = st.columns(3)
+            cloud_id = input_col1.text_input("cloud_id/host: ", type='password')
+            username = input_col2.text_input("username: ")
+            password = input_col3.text_input("password: ", type='password')
+        oai_api = st.text_input("openai_api_key: ", type='password')
         model_option = st.selectbox(
             'Choose LLM Model',
             [key for key, val in models.items() if val["available"]]
