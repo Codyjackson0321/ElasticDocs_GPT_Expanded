@@ -164,6 +164,11 @@ def search(query_text, index="search-elastic-docs"):
             exist_field = "title-vector"
         else:
             exist_field = "ml.inference.title"
+
+    if int(major) >=8 and int(minor) >= 11:
+        elser_trained_model = ".elser_model_2_linux-x86_64"
+    else:
+        elser_trained_model = ".elser_model_1"
             
     # Elasticsearch query (BM25) and kNN configuration for hybrid search
     query = {
@@ -224,7 +229,7 @@ def search(query_text, index="search-elastic-docs"):
                     {
                         "text_expansion": {
                             "ml.inference.body_content_expanded.predicted_value": {
-                                "model_id": ".elser_model_1",
+                                "model_id": elser_trained_model,
                                 "model_text": query_text
                             }
                         }
@@ -232,7 +237,7 @@ def search(query_text, index="search-elastic-docs"):
                     {
                         "text_expansion": {
                             "ml.inference.title_expanded.predicted_value": {
-                                "model_id": ".elser_model_1",
+                                "model_id": elser_trained_model,
                                 "model_text": query_text
                             }
                         }
