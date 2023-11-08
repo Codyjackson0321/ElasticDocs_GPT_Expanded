@@ -38,19 +38,26 @@ models = {
         "output_cost": 0.004,
         "available": True 
     },
-    "gpt-4-8k-tokens": {
+    "gpt-4-8k-tokens PAID": {
         "name": "gpt-4", 
         "token_length": 8192,
         "input_cost": 0.03,
         "output_cost": 0.06,
-        "available": False 
+        "available": True 
     },
-    "gpt-4-32k-tokens": {
+    "gpt-4-32k-tokens PAID": {
         "name": "gpt-4-32k", 
         "token_length": 32768,
         "input_cost": 0.06,
         "output_cost": 0.12,
-        "available": False 
+        "available": True 
+    },
+    "gpt-4-128k-tokens PAID": {
+        "name": "gpt-4-1106-preview", 
+        "token_length": 131072,
+        "input_cost": 0.01,
+        "output_cost": 0.03,
+        "available": True 
     }
 }
 
@@ -147,11 +154,17 @@ def search(query_text, index="search-elastic-docs"):
     openai.api_key = os.environ['openai_api_key']
 
     es = es_connect(cid, cu, cp)
+    major, minor, _ = es.info()["version"]["number"].split('.')
 
     if "query_field" in os.environ:
         query_field = os.environ["query_field"]
     else:
         query_field = "title-vector"
+        if int(major) >= 8 and int(minor) <= 9:
+            exist_field = "title-vector"
+        else:
+            exist_field = "ml.inference.title"
+            
     # Elasticsearch query (BM25) and kNN configuration for hybrid search
     query = {
         "bool": {
@@ -165,7 +178,7 @@ def search(query_text, index="search-elastic-docs"):
             }],
             "filter": [{
                 "exists": {
-                    "field": query_field
+                    "field": exist_field
                 }
             }]
         }
@@ -253,13 +266,22 @@ def chat_gpt(prompt, model, max_tokens=1024):
     truncated_prompt, word_count = truncate_text(prompt, models[model]['token_length'] - max_tokens - safety_margin)
     openai_token_count = encoding_token_count(prompt, models[model]['name'])
     print(f"word_count = {word_count}, openai_token_count = {openai_token_count}")
-    response = openai.ChatCompletion.create(model=models[model]['name'],
+    openai_version, _, _ = openai.__version__.split('.')
+    if int(openai_version) > 0:
+        response = openai.chat.completions.create(model=models[model]['name'],
+                                            messages=[
+                                                {"role": "system", "content": "You are a helpful assistant."},
+                                                {"role": "user", "content": truncated_prompt}
+                                                      ])
+        return response.choices[0].message.content, word_count, response.usage.total_tokens
+    else:
+        response = openai.ChatCompletion.create(model=models[model]['name'],
                                             messages=[
                                                 {"role": "system", "content": "You are a helpful assistant."},
                                                 {"role": "user", "content": truncated_prompt}
                                                       ])
 
-    return response["choices"][0]["message"]["content"], word_count, response["usage"]["total_tokens"]
+        return response["choices"][0]["message"]["content"], word_count, response["usage"]["total_tokens"]
 
 
 def main():
