@@ -27,7 +27,7 @@ models = {
     "gpt-3.5-4k-tokens": {
         "name": "gpt-3.5-turbo", 
         "token_length": 4096,
-        "input_cost": 0.0015,
+        "input_cost": 0.0010,
         "output_cost": 0.002,
         "available": True 
     },
