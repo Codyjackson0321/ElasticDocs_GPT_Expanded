@@ -38,6 +38,13 @@ models = {
         "output_cost": 0.004,
         "available": True 
     },
+    "gpt-3.5-16k-tokens-latest": {
+        "name": "gpt-3.5-turbo-1106", 
+        "token_length": 16384,
+        "input_cost": 0.003,
+        "output_cost": 0.004,
+        "available": True 
+    },
     "gpt-4-8k-tokens PAID": {
         "name": "gpt-4", 
         "token_length": 8192,
@@ -46,7 +53,7 @@ models = {
         "available": True 
     },
     "gpt-4-32k-tokens PAID": {
-        "name": "gpt-4-32k", 
+        "name": "gpt-4", 
         "token_length": 32768,
         "input_cost": 0.06,
         "output_cost": 0.12,
@@ -158,6 +165,7 @@ def search(query_text, index="search-elastic-docs"):
 
     if "query_field" in os.environ:
         query_field = os.environ["query_field"]
+        exist_field = query_field
     else:
         query_field = "title-vector"
         if int(major) >= 8 and int(minor) <= 9:
@@ -320,7 +328,7 @@ def main():
         submit_button = st.form_submit_button("Send")
 
     # Generate and display response on form submission
-    negResponse = "I'm unable to answer the question based on the information I have from Elastic Docs."
+    negResponse = "I'm unable to answer the question based on the information I have from Elasticsearch Docs."
     if submit_button:
         print(f"selected model {model_option}")
         if not check_env(cloud_id=cloud_id, cloud_user=username, cloud_pass=password, openai_api_key=oai_api):
@@ -331,15 +339,15 @@ def main():
             s_col = {}
             s_col["bm25"], s_col["vector"],s_col["elser"] = st.columns(3)
             s_col["bm25"].write("# BM25")
-            s_col["vector"].write("# Basic Vector")
-            s_col["elser"].write("# Elser")
+            s_col["vector"].write("# Dense Vector")
+            s_col["elser"].write("# ELSERv2")
 
             for s in search_results.keys():
                 col = s_col[s]
                 try:
                     body = search_results[s]['hits']['hits'][0]['fields']['body_content'][0]
                     url = search_results[s]['hits']['hits'][0]['fields']['url'][0]
-                    prompt = f"Answer this question: {query}\nUsing only the information from this Elastic Doc: {body}\nIf the answer is not contained in the supplied doc reply '{negResponse}' and nothing else"
+                    prompt = f"Answer this question: {query}\nUsing only the information from this Elasticsearch Doc: {body}\nIf the answer is not contained in the supplied doc reply '{negResponse}' and nothing else"
                     begin = time.perf_counter()
                     answer, word_count, openai_token_count = chat_gpt(prompt, model=model_option)
                     end = time.perf_counter()
