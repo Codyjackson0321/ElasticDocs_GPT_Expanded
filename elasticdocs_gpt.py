@@ -24,46 +24,39 @@ import re
 # cloud_pass - Elasticsearch User Password
 
 models = {
-    "gpt-3.5-4k-tokens": {
-        "name": "gpt-3.5-turbo", 
-        "token_length": 4096,
-        "input_cost": 0.0010,
-        "output_cost": 0.002,
+    "gpt-4-128k-tokens LATEST Input:$10/1M; Output:$30/1M": {
+        "name": "gpt-4-turbo-preview", 
+        "token_length": 131072,
+        "input_cost": 0.01,
+        "output_cost": 0.03,
         "available": True 
     },
-    "gpt-3.5-16k-tokens": {
-        "name": "gpt-3.5-turbo-16k", 
-        "token_length": 16384,
-        "input_cost": 0.003,
-        "output_cost": 0.004,
-        "available": True 
-    },
-    "gpt-3.5-16k-tokens-latest": {
-        "name": "gpt-3.5-turbo-1106", 
-        "token_length": 16384,
-        "input_cost": 0.003,
-        "output_cost": 0.004,
-        "available": True 
-    },
-    "gpt-4-8k-tokens PAID": {
+    "gpt-4-8k-tokens Input:$30/1M; Output:$60/1M": {
         "name": "gpt-4", 
         "token_length": 8192,
         "input_cost": 0.03,
         "output_cost": 0.06,
         "available": True 
     },
-    "gpt-4-32k-tokens PAID": {
-        "name": "gpt-4", 
+    "gpt-4-32k-tokens Input:$60/1M; Output:$120/1M": {
+        "name": "gpt-4-32k", 
         "token_length": 32768,
         "input_cost": 0.06,
         "output_cost": 0.12,
         "available": True 
     },
-    "gpt-4-128k-tokens PAID": {
-        "name": "gpt-4-1106-preview", 
-        "token_length": 131072,
-        "input_cost": 0.01,
-        "output_cost": 0.03,
+    "gpt-3.5-16k-tokens Input:$0.50/1M;Output:$1.50/1M": {
+        "name": "gpt-3.5-turbo", 
+        "token_length": 16384,
+        "input_cost": 0.003,
+        "output_cost": 0.004,
+        "available": True 
+    },
+    "gpt-3.5-4k-tokens Input:$1.5/1M;Output:$2/1M": {
+        "name": "gpt-3.5-turbo-instruct", 
+        "token_length": 4096,
+        "input_cost": 0.0010,
+        "output_cost": 0.002,
         "available": True 
     }
 }
